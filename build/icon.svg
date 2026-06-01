@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#171b24"/>
+      <stop offset="1" stop-color="#080a0e"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.28" r="0.75">
+      <stop offset="0" stop-color="#e10600" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#e10600" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff4b3e"/>
+      <stop offset="1" stop-color="#c70500"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="18" flood-color="#ff2d24" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="225" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="225" fill="url(#glow)"/>
+  <rect x="6" y="6" width="1012" height="1012" rx="220" fill="none" stroke="#2a3240" stroke-width="3"/>
+
+  <!-- traccia quadrante -->
+  <path d="M 257.44 766.56 A 360 360 0 1 1 766.56 766.56" fill="none" stroke="#2b3340" stroke-width="26" stroke-linecap="round"/>
+  <!-- arco valore (rosso) -->
+  <path d="M 257.44 766.56 A 360 360 0 0 1 758.44 249.57" fill="none" stroke="url(#red)" stroke-width="26" stroke-linecap="round" filter="url(#shadow)"/>
+
+  <line x1="263.10" y1="760.90" x2="294.21" y2="729.79" stroke="#5b6677" stroke-width="11" stroke-linecap="round"/><line x1="177.23" y1="620.77" x2="201.96" y2="612.74" stroke="#5b6677" stroke-width="6" stroke-linecap="round"/><line x1="164.33" y1="456.94" x2="207.79" y2="463.82" stroke="#5b6677" stroke-width="11" stroke-linecap="round"/><line x1="227.23" y1="305.10" x2="248.26" y2="320.38" stroke="#5b6677" stroke-width="6" stroke-linecap="round"/><line x1="352.20" y1="198.37" x2="372.17" y2="237.57" stroke="#5b6677" stroke-width="11" stroke-linecap="round"/><line x1="512.00" y1="160.00" x2="512.00" y2="186.00" stroke="#5b6677" stroke-width="6" stroke-linecap="round"/><line x1="671.80" y1="198.37" x2="651.83" y2="237.57" stroke="#5b6677" stroke-width="11" stroke-linecap="round"/><line x1="796.77" y1="305.10" x2="775.74" y2="320.38" stroke="#ff3b30" stroke-width="6" stroke-linecap="round"/><line x1="859.67" y1="456.94" x2="816.21" y2="463.82" stroke="#ff3b30" stroke-width="11" stroke-linecap="round"/><line x1="846.77" y1="620.77" x2="822.04" y2="612.74" stroke="#ff3b30" stroke-width="6" stroke-linecap="round"/><line x1="760.90" y1="760.90" x2="729.79" y2="729.79" stroke="#ff3b30" stroke-width="11" stroke-linecap="round"/>
+
+  <!-- traccia telemetria -->
+  <path d="M 312.00 626.00 L 362.00 626.00 L 392.00 570.00 L 420.00 668.00 L 454.00 538.00 L 492.00 630.00 L 532.00 630.00 L 560.00 556.00 L 598.00 648.00 L 632.00 578.00 L 672.00 626.00 L 712.00 626.00" fill="none" stroke="#22d3ee" stroke-width="14" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>
+
+  <!-- lancetta -->
+  <polygon points="710.52 300.60, 536.78 535.27, 487.22 488.73" fill="url(#red)" filter="url(#shadow)"/>
+  <circle cx="512" cy="512" r="40" fill="#12151c" stroke="#ff3b30" stroke-width="9"/>
+  <circle cx="512" cy="512" r="13" fill="#ff3b30"/>
+</svg>

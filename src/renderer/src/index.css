@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: Inter, system-ui, sans-serif;
+  background:
+    radial-gradient(900px 600px at 80% -10%, rgba(225, 6, 0, 0.08), transparent 60%),
+    #0a0c10;
+  color: #e6e9ef;
+  overflow: hidden;
+}
+
+@layer components {
+  .panel {
+    @apply bg-racing-panel border border-racing-border rounded-xl;
+  }
+  .panel-2 {
+    @apply bg-racing-panel2 border border-racing-border rounded-lg;
+  }
+  .num {
+    @apply font-mono tabular-nums tracking-tight;
+  }
+  .label {
+    @apply text-[10px] uppercase tracking-[0.15em] text-white/40 font-medium;
+  }
+  .nav-btn {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/55
+      transition-colors hover:bg-white/5 hover:text-white/90;
+  }
+  .nav-btn-active {
+    @apply bg-racing-accent/15 text-white;
+  }
+  .input {
+    @apply w-full bg-racing-panel2 border border-racing-border rounded-lg px-3 py-2.5 text-sm
+      outline-none focus:border-racing-accent/60;
+  }
+  .btn-accent {
+    @apply flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-racing-accent
+      hover:bg-racing-accent/85 text-white text-sm font-medium transition-colors;
+  }
+}
+
+/* Scrollbar dark racing */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a3040;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #353d50;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}

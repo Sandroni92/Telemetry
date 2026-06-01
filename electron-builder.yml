@@ -1,0 +1,45 @@
+appId: com.acctelemetry.engineer
+productName: ACC Telemetry Engineer
+copyright: Copyright © 2026 ACC Telemetry Engineer
+
+# Feed degli aggiornamenti automatici (GitHub Releases).
+publish:
+  provider: github
+  owner: Sandroni92
+  repo: Telemetry
+
+directories:
+  buildResources: build
+  output: dist
+
+files:
+  - out/**/*
+  - package.json
+
+asarUnpack:
+  - resources/**
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+mac:
+  category: public.app-category.utilities
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+dmg:
+  title: ${productName}
