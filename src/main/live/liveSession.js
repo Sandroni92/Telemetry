@@ -18,12 +18,20 @@ import { EventEmitter } from 'events'
 import { WebSocketServer, WebSocket } from 'ws'
 import dgram from 'dgram'
 import os from 'os'
+import crypto from 'crypto'
+import https from 'https'
+import { startRelay } from './relayCore.js'
+import { encodeInvite } from './invite.js'
 
 export const DEFAULT_PORT = 8788
+export const DEFAULT_RELAY_PORT = 8787
 const DISCOVERY_PORT = 48788
 const MAGIC = 'ACC_TELEMETRY_SESSION_v1'
 const BEACON_MS = 1000
 const STALE_MS = 4000
+
+// Alfabeto del codice‑stanza: niente caratteri ambigui (0/O, 1/I).
+const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 export class LiveSession extends EventEmitter {
   constructor() {
@@ -46,8 +54,11 @@ export class LiveSession extends EventEmitter {
     this.relayWs = null
     this.relayUrl = null
     this.room = null
+    this.relayToken = null
     this.relayRetry = null
     this.relayPeers = 0
+    this.embeddedRelay = null // relay generato dentro l'app (host)
+    this.publicIp = null
   }
 
   get state() {
@@ -211,24 +222,90 @@ export class LiveSession extends EventEmitter {
 
   // ---------- RELAY (Internet, tramite codice-stanza) ----------
 
-  startHostRelay(relayUrl, room) {
+  /**
+   * Genera il relay DENTRO l'app: avvia un server relay locale protetto da token,
+   * vi si collega come host e produce un "invito" sicuro (URL + stanza + token) da
+   * consegnare all'ingegnere. Nessun servizio esterno richiesto: per il gioco via
+   * Internet basta che la porta del relay sia raggiungibile (port‑forward/tunnel),
+   * mentre il token impedisce l'accesso a chi non ha l'invito.
+   */
+  async startHostEmbeddedRelay(port = DEFAULT_RELAY_PORT) {
+    this.stop()
+    this.mode = 'host'
+    this.transport = 'relay'
+    const room = genRoom()
+    const token = genToken()
+    this.room = room
+    this.relayToken = token
+
+    try {
+      this.embeddedRelay = await startRelay({ port, token, log: (m) => console.log(m) })
+    } catch (e) {
+      this.mode = 'offline'
+      this.transport = null
+      this.relayToken = null
+      this.emit('error', `Impossibile avviare il relay sulla porta ${port}: ${e.message}`)
+      this.emit('state', this.state)
+      return null
+    }
+
+    // L'host si collega al proprio relay in locale (latenza trascurabile).
+    this.relayUrl = `ws://127.0.0.1:${port}`
+    const lan = lanAddresses()
+    const reachUrl = `ws://${lan[0] || '127.0.0.1'}:${port}`
+    this.hostInfo = {
+      embedded: true,
+      room,
+      port,
+      token,
+      addresses: lan,
+      name: this.name,
+      relayUrl: this.relayUrl,
+      invite: encodeInvite({ url: reachUrl, room, token })
+    }
+    this.connectRelay()
+    this.emit('state', this.state)
+
+    // Best effort: rileva l'IP pubblico per un invito usabile via Internet.
+    fetchPublicIp().then((ip) => {
+      if (!ip || !this.embeddedRelay || this.transport !== 'relay') return
+      this.publicIp = ip
+      this.hostInfo = {
+        ...this.hostInfo,
+        publicIp: ip,
+        invite: encodeInvite({ url: `ws://${ip}:${port}`, room, token })
+      }
+      this.emit('state', this.state)
+    })
+    return this.hostInfo
+  }
+
+  startHostRelay(relayUrl, room = genRoom(), token = null) {
     this.stop()
     this.mode = 'host'
     this.transport = 'relay'
     this.relayUrl = relayUrl
     this.room = room
-    this.hostInfo = { relayUrl, room, name: this.name }
+    this.relayToken = token || genToken()
+    this.hostInfo = {
+      relayUrl,
+      room,
+      token: this.relayToken,
+      name: this.name,
+      invite: encodeInvite({ url: relayUrl, room, token: this.relayToken })
+    }
     this.connectRelay()
     this.emit('state', this.state)
     return { relayUrl, room }
   }
 
-  joinRelay(relayUrl, room) {
+  joinRelay(relayUrl, room, token = null) {
     this.stop()
     this.mode = 'engineer'
     this.transport = 'relay'
     this.relayUrl = relayUrl
     this.room = room
+    this.relayToken = token
     this.hostInfo = { relayUrl, room, name: 'sessione remota' }
     this.connectRelay()
     this.emit('state', this.state)
@@ -236,7 +313,8 @@ export class LiveSession extends EventEmitter {
 
   connectRelay() {
     const sep = this.relayUrl.includes('?') ? '&' : '?'
-    const url = `${this.relayUrl}${sep}room=${encodeURIComponent(this.room)}&role=${this.mode}`
+    let url = `${this.relayUrl}${sep}room=${encodeURIComponent(this.room)}&role=${this.mode}`
+    if (this.relayToken) url += `&auth=${encodeURIComponent(this.relayToken)}`
     try {
       this.relayWs = new WebSocket(url, { perMessageDeflate: false })
       this.relayWs.on('open', () => {
@@ -257,9 +335,17 @@ export class LiveSession extends EventEmitter {
           this.emit('state', this.state)
         }
       })
-      this.relayWs.on('close', () => {
+      this.relayWs.on('close', (code) => {
         this.relayPeers = 0
         this.emit('state', this.state)
+        if (code === 4401) {
+          this.emit('error', 'Accesso al relay negato: invito o token non valido.')
+          return
+        }
+        if (code === 4403) {
+          this.emit('error', 'Stanza piena: troppi partecipanti.')
+          return
+        }
         if (this.transport === 'relay') this.scheduleRelayReconnect()
       })
       this.relayWs.on('error', () => {})
@@ -349,6 +435,16 @@ export class LiveSession extends EventEmitter {
     this.relayWs = null
     this.relayPeers = 0
     this.room = null
+    this.relayToken = null
+    this.publicIp = null
+    if (this.embeddedRelay) {
+      try {
+        this.embeddedRelay.close()
+      } catch {
+        /* ignora */
+      }
+      this.embeddedRelay = null
+    }
     if (this.beaconTimer) clearInterval(this.beaconTimer)
     this.beaconTimer = null
     try {
@@ -390,6 +486,48 @@ function parse(raw) {
   } catch {
     return null
   }
+}
+
+/** Codice‑stanza breve, leggibile e senza caratteri ambigui. */
+function genRoom() {
+  const b = crypto.randomBytes(5)
+  let s = ''
+  for (let i = 0; i < 5; i++) s += ROOM_ALPHABET[b[i] % ROOM_ALPHABET.length]
+  return s
+}
+
+/** Token segreto della stanza: 128 bit casuali in esadecimale. */
+function genToken() {
+  return crypto.randomBytes(16).toString('hex')
+}
+
+/** IP pubblico (best effort) per costruire un invito raggiungibile via Internet. */
+function fetchPublicIp() {
+  return new Promise((resolve) => {
+    let req
+    try {
+      req = https.get('https://api.ipify.org', { timeout: 4000 }, (res) => {
+        let d = ''
+        res.on('data', (c) => (d += c))
+        res.on('end', () => {
+          const ip = d.trim()
+          resolve(/^\d{1,3}(\.\d{1,3}){3}$/.test(ip) ? ip : null)
+        })
+      })
+    } catch {
+      resolve(null)
+      return
+    }
+    req.on('error', () => resolve(null))
+    req.on('timeout', () => {
+      try {
+        req.destroy()
+      } catch {
+        /* ignora */
+      }
+      resolve(null)
+    })
+  })
 }
 
 function lanAddresses() {

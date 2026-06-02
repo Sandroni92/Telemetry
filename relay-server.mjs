@@ -1,70 +1,38 @@
 /**
- * Relay WebSocket con STANZE per la sessione live via Internet.
+ * Relay WebSocket con STANZE per la sessione live via Internet (versione standalone).
  *
- * Pilota e ingegnere (anche da case diverse) si collegano allo stesso relay e alla
- * stessa stanza (un codice breve). Il relay inoltra telemetria e strategia tra i
- * membri della stanza: nessuna delle due parti deve aprire porte sul proprio router,
- * perché entrambe fanno solo connessioni in uscita verso il relay.
+ * NOTA: dalla v1 puoi generare il relay DIRETTAMENTE nell'app
+ * (Sessione Live → Ospita → Remoto → "Genera relay sicuro nell'app"), senza avviare
+ * nulla a mano. Questo script resta utile se preferisci un relay sempre attivo su un
+ * VPS condiviso da più sessioni.
  *
- * Avvio:   npm run relay              (porta 8787, oppure PORT=9000 npm run relay)
+ * Pilota e ingegnere si collegano allo stesso relay e alla stessa stanza: il relay
+ * inoltra telemetria e strategia tra i membri. Nessuno deve aprire porte sul proprio
+ * router, perché entrambi fanno solo connessioni in USCITA verso il relay.
  *
- * Va eseguito su una macchina raggiungibile da entrambi i PC: un piccolo VPS, oppure
- * la propria rete esposta con un tunnel (es. ngrok / cloudflared). Poi nell'app, in
- * "Sessione Live → Remoto", si inserisce l'URL del relay (ws://host:8787) e il codice.
+ * Sicurezza: ogni stanza è protetta da un token. Con RELAY_TOKEN imposti un token
+ * unico per tutte le stanze del server; senza, ogni stanza adotta il token con cui
+ * il primo client (il pilota) la crea — l'app lo inserisce nell'invito.
+ *
+ * Avvio:   npm run relay                       (porta 8787)
+ *          PORT=9000 RELAY_TOKEN=segreto npm run relay
  */
 
-import { WebSocketServer } from 'ws'
-import { URL } from 'url'
+import { startRelay } from './src/main/live/relayCore.js'
 
 const PORT = Number(process.env.PORT) || 8787
-const wss = new WebSocketServer({ port: PORT, perMessageDeflate: false })
+const TOKEN = process.env.RELAY_TOKEN || null
 
-const rooms = new Map() // code -> { clients:Set, lastStrategy }
-
-function getRoom(code) {
-  if (!rooms.has(code)) rooms.set(code, { clients: new Set(), lastStrategy: null })
-  return rooms.get(code)
-}
-
-function broadcastPeers(room) {
-  const msg = JSON.stringify({ t: 'peers', n: room.clients.size })
-  for (const c of room.clients) if (c.readyState === 1) c.send(msg)
-}
-
-wss.on('connection', (ws, req) => {
-  try {
-    ws._socket.setNoDelay(true)
-  } catch {
-    /* ignora */
-  }
-  const u = new URL(req.url, 'ws://x')
-  const code = (u.searchParams.get('room') || 'LOBBY').toUpperCase()
-  const role = u.searchParams.get('role') || '?'
-  const room = getRoom(code)
-  room.clients.add(ws)
-  console.log(`[relay] ${role} → stanza ${code} (${room.clients.size} presenti)`)
-
-  if (room.lastStrategy) ws.send(JSON.stringify({ t: 'strategy', data: room.lastStrategy }))
-  broadcastPeers(room)
-
-  ws.on('message', (raw) => {
-    const text = raw.toString()
-    try {
-      const m = JSON.parse(text)
-      if (m?.t === 'strategy') room.lastStrategy = m.data
-    } catch {
-      /* inoltra comunque */
-    }
-    for (const c of room.clients) if (c !== ws && c.readyState === 1) c.send(text)
+startRelay({ port: PORT, token: TOKEN, log: (m) => console.log(m) })
+  .then(() => {
+    console.log(`🏁 Relay (stanze) in ascolto su ws://0.0.0.0:${PORT}`)
+    console.log(
+      TOKEN
+        ? '🔒 Token globale attivo: i client devono presentare RELAY_TOKEN.'
+        : '🔒 Ogni stanza usa il token del primo client (incluso nell’invito dell’app).'
+    )
   })
-
-  ws.on('close', () => {
-    room.clients.delete(ws)
-    if (room.clients.size === 0) rooms.delete(code)
-    else broadcastPeers(room)
-    console.log(`[relay] uscita da ${code} (${room.clients.size} restanti)`)
+  .catch((e) => {
+    console.error(`Impossibile avviare il relay sulla porta ${PORT}:`, e.message)
+    process.exit(1)
   })
-  ws.on('error', () => {})
-})
-
-console.log(`🏁 Relay (stanze) in ascolto su ws://0.0.0.0:${PORT}`)

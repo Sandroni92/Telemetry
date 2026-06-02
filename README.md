@@ -94,23 +94,33 @@ modifica). Porta di default: `8788` (TCP) + `48788` (UDP discovery).
 
 ### 🌍 Ingegnere remoto via Internet (da un'altra casa)
 
-Quando i due PC NON sono sulla stessa rete, si usa la modalità **Remoto** con un relay
-e un **codice‑stanza** — niente porte da aprire sul router (entrambi i PC fanno solo
-connessioni in uscita verso il relay), e il relay inoltra **sia telemetria che strategia**.
+Quando i due PC NON sono sulla stessa rete, si usa la modalità **Remoto**. Il relay
+inoltra **sia telemetria che strategia** ed è **generato direttamente dall'app** — non
+serve avviare nulla a mano:
+
+- **Pilota** → *Sessione Live → Ospita → Remoto → «Genera relay sicuro nell'app»*: l'app
+  avvia un relay locale protetto da **token** e produce un **invito sicuro** (una sola
+  stringa `acc1:…`). Premi **Copia invito** e mandalo all'ingegnere.
+- **Ingegnere** → *Sessione Live → Unisciti → Remoto → «Connetti con invito»*: incolla
+  l'invito e sei dentro. L'invito contiene già relay, stanza e token: **senza di esso
+  nessuno può collegarsi alla sessione**.
+
+Per il gioco via Internet la porta del relay (`8787`) dev'essere raggiungibile dall'altro
+PC: **inoltra la porta sul router** verso il PC del pilota, oppure usa un **tunnel**
+(ngrok/cloudflared) o una **VPN** tipo Tailscale (con la VPN l'invito generato in LAN
+funziona già così com'è).
+
+**Relay esterno (opzionale):** se preferisci un relay sempre attivo su un VPS condiviso,
+puoi ancora avviarlo a mano e indicarne l'URL nell'app (*Ospita → Remoto → «Usa invece un
+relay esterno»*):
 
 ```bash
-# Su una macchina raggiungibile da entrambi (VPS, oppure rete esposta con ngrok/cloudflared)
-npm run relay            # ws://0.0.0.0:8787  (PORT=9000 per cambiare porta)
+npm run relay                          # ws://0.0.0.0:8787  (PORT=9000 per cambiare porta)
+RELAY_TOKEN=unsegreto npm run relay    # token unico per tutte le stanze del server
 ```
 
-Poi nell'app:
-- **Pilota** → *Sessione Live → Ospita → Remoto*: incolla l'URL del relay → ottieni un
-  **codice‑stanza** (es. `7K2P9`) da dare all'ingegnere.
-- **Ingegnere** → *Sessione Live → Unisciti → Remoto*: stesso URL del relay + codice‑stanza.
-
 L'ingegnere remoto vede così la **dashboard live**, i **grafici** e modifica la
-**strategia** esattamente come in LAN. (In alternativa al relay, una VPN tipo Tailscale
-rende trasparente anche la modalità LAN tra case diverse.)
+**strategia** esattamente come in LAN.
 
 ## 🔄 Aggiornamenti automatici (auto-update)
 

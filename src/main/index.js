@@ -167,8 +167,9 @@ function setupLive() {
   ipcMain.handle('live:state', () => live.state)
   ipcMain.handle('live:host', () => live.startHost())
   ipcMain.handle('live:join', (_e, host, port) => live.joinHost(host, port))
-  ipcMain.handle('live:host-relay', (_e, relayUrl, room) => live.startHostRelay(relayUrl, room))
-  ipcMain.handle('live:join-relay', (_e, relayUrl, room) => live.joinRelay(relayUrl, room))
+  ipcMain.handle('live:host-embedded-relay', (_e, port) => live.startHostEmbeddedRelay(port))
+  ipcMain.handle('live:host-relay', (_e, relayUrl, room, token) => live.startHostRelay(relayUrl, room, token))
+  ipcMain.handle('live:join-relay', (_e, relayUrl, room, token) => live.joinRelay(relayUrl, room, token))
   ipcMain.handle('live:leave', () => {
     live.stopDiscovery()
     live.stop()

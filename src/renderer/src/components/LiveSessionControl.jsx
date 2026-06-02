@@ -14,13 +14,15 @@ import {
   ArrowLeft,
   CircleDot,
   Globe,
-  Network
+  Network,
+  ShieldCheck
 } from 'lucide-react'
 import { useLiveSession } from '../hooks/useLiveSession'
+import { decodeInvite } from '../lib/invite'
 
 const DEFAULT_PORT = 8788
+const RELAY_PORT = 8787
 
-const genRoom = () => Math.random().toString(36).slice(2, 7).toUpperCase()
 const getRelayUrl = () => localStorage.getItem('acc-relay-url') || ''
 const setRelayUrl = (v) => localStorage.setItem('acc-relay-url', v)
 
@@ -166,11 +168,11 @@ function HostSetup({ live, onBack }) {
   const [tab, setTab] = useState('lan')
   const [relay, setRelay] = useState(getRelayUrl())
 
-  const startRelay = () => {
+  const startExternalRelay = () => {
     const url = relay.trim()
     if (!url) return
     setRelayUrl(url)
-    live.hostRelay(url, genRoom())
+    live.hostRelay(url)
   }
 
   return (
@@ -190,20 +192,43 @@ function HostSetup({ live, onBack }) {
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-white/50">
-            Collega un relay raggiungibile da entrambi (vedi <code>npm run relay</code>).
-            Verrà generato un codice‑stanza da dare all'ingegnere.
+            Genera un relay <span className="text-white/80">direttamente nell'app</span>:
+            ottieni un <span className="text-white/80">invito sicuro</span> (un solo codice,
+            protetto da token) da dare all'ingegnere. Nessun server esterno da configurare.
           </p>
-          <Field label="URL del relay">
-            <input
-              value={relay}
-              onChange={(e) => setRelay(e.target.value)}
-              placeholder="ws://mio-relay.example.com:8787"
-              className="input num"
-            />
-          </Field>
-          <button onClick={startRelay} disabled={!relay.trim()} className="btn-accent w-full disabled:opacity-30">
-            <Globe size={16} /> Avvia hosting remoto
+          <button onClick={() => live.hostEmbeddedRelay(RELAY_PORT)} className="btn-accent w-full">
+            <ShieldCheck size={16} /> Genera relay sicuro nell'app
           </button>
+          <p className="text-[11px] text-white/35 flex items-start gap-1.5">
+            <Globe size={13} className="mt-px shrink-0" />
+            <span>
+              Per giocare via Internet la porta {RELAY_PORT} dev'essere raggiungibile
+              (port‑forward sul router o un tunnel). In LAN o VPN funziona senza configurazione.
+            </span>
+          </p>
+
+          <details className="pt-1">
+            <summary className="text-xs text-white/45 cursor-pointer hover:text-white/70 select-none">
+              Usa invece un relay esterno
+            </summary>
+            <div className="space-y-3 mt-3">
+              <Field label="URL del relay">
+                <input
+                  value={relay}
+                  onChange={(e) => setRelay(e.target.value)}
+                  placeholder="ws://mio-relay.example.com:8787"
+                  className="input num"
+                />
+              </Field>
+              <button
+                onClick={startExternalRelay}
+                disabled={!relay.trim()}
+                className="w-full py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm font-medium transition-colors disabled:opacity-30"
+              >
+                Avvia con relay esterno
+              </button>
+            </div>
+          </details>
         </div>
       )}
     </div>
@@ -216,6 +241,9 @@ function JoinSetup({ live, onBack }) {
   const [manual, setManual] = useState('')
   const [relay, setRelay] = useState(getRelayUrl())
   const [room, setRoom] = useState('')
+  const [token, setToken] = useState('')
+  const [invite, setInvite] = useState('')
+  const [inviteErr, setInviteErr] = useState('')
 
   useEffect(() => {
     if (tab === 'lan') startDiscovery()
@@ -231,12 +259,24 @@ function JoinSetup({ live, onBack }) {
     join(host, port ? parseInt(port, 10) : DEFAULT_PORT)
   }
 
+  const connectInvite = () => {
+    const dec = decodeInvite(invite)
+    if (!dec) {
+      setInviteErr('Invito non valido: controlla di averlo copiato per intero.')
+      return
+    }
+    setInviteErr('')
+    setRelayUrl(dec.url)
+    joinRelay(dec.url, dec.room, dec.token)
+  }
+
   const connectRelay = () => {
     const url = relay.trim()
     const code = room.trim().toUpperCase()
-    if (!url || !code) return
+    const tok = token.trim()
+    if (!url || !code || !tok) return
     setRelayUrl(url)
-    joinRelay(url, code)
+    joinRelay(url, code, tok)
   }
 
   return (
@@ -293,28 +333,69 @@ function JoinSetup({ live, onBack }) {
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-white/50">
-            Inserisci l'URL del relay e il codice‑stanza che ti ha dato il pilota.
+            Incolla l'<span className="text-white/80">invito sicuro</span> che ti ha dato il
+            pilota: contiene già relay, stanza e token.
           </p>
-          <Field label="URL del relay">
+          <Field label="Invito">
             <input
-              value={relay}
-              onChange={(e) => setRelay(e.target.value)}
-              placeholder="ws://mio-relay.example.com:8787"
+              value={invite}
+              onChange={(e) => {
+                setInvite(e.target.value)
+                setInviteErr('')
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && connectInvite()}
+              placeholder="acc1:…"
               className="input num"
             />
           </Field>
-          <Field label="Codice stanza">
-            <input
-              value={room}
-              onChange={(e) => setRoom(e.target.value.toUpperCase())}
-              onKeyDown={(e) => e.key === 'Enter' && connectRelay()}
-              placeholder="ES. 7K2P9"
-              className="input num tracking-[0.3em] uppercase"
-            />
-          </Field>
-          <button onClick={connectRelay} disabled={!relay.trim() || !room.trim()} className="btn-accent w-full disabled:opacity-30">
-            <Globe size={16} /> Connetti da remoto
+          {inviteErr && <div className="text-[11px] text-racing-accent">{inviteErr}</div>}
+          <button
+            onClick={connectInvite}
+            disabled={!invite.trim()}
+            className="btn-accent w-full disabled:opacity-30"
+          >
+            <ShieldCheck size={16} /> Connetti con invito
           </button>
+
+          <details className="pt-1">
+            <summary className="text-xs text-white/45 cursor-pointer hover:text-white/70 select-none">
+              Inserisci i dati manualmente
+            </summary>
+            <div className="space-y-3 mt-3">
+              <Field label="URL del relay">
+                <input
+                  value={relay}
+                  onChange={(e) => setRelay(e.target.value)}
+                  placeholder="ws://mio-relay.example.com:8787"
+                  className="input num"
+                />
+              </Field>
+              <Field label="Codice stanza">
+                <input
+                  value={room}
+                  onChange={(e) => setRoom(e.target.value.toUpperCase())}
+                  placeholder="ES. 7K2P9"
+                  className="input num tracking-[0.3em] uppercase"
+                />
+              </Field>
+              <Field label="Token">
+                <input
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && connectRelay()}
+                  placeholder="token segreto"
+                  className="input num"
+                />
+              </Field>
+              <button
+                onClick={connectRelay}
+                disabled={!relay.trim() || !room.trim() || !token.trim()}
+                className="w-full py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm font-medium transition-colors disabled:opacity-30"
+              >
+                <Globe size={15} className="inline mr-1.5 -mt-0.5" /> Connetti da remoto
+              </button>
+            </div>
+          </details>
         </div>
       )}
     </div>
@@ -324,15 +405,6 @@ function JoinSetup({ live, onBack }) {
 function HostView({ state, onLeave }) {
   const relay = state.transport === 'relay'
   const info = state.hostInfo || {}
-  const addr = info.addresses?.[0]
-  const code = relay ? info.room : addr ? `${addr}:${info.port}` : `porta ${info.port}`
-  const [copied, setCopied] = useState(false)
-
-  const copy = () => {
-    navigator.clipboard.writeText(code)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
 
   return (
     <div className="space-y-4">
@@ -346,41 +418,116 @@ function HostView({ state, onLeave }) {
         </span>
       </div>
 
-      <div>
-        <div className="label mb-1.5">
-          {relay ? 'Dai questo codice all’ingegnere' : "L'ingegnere ti trova automaticamente sulla LAN"}
-        </div>
-        <p className="text-xs text-white/45 mb-2">
-          {relay
-            ? 'Nella sua app: Unisciti → Remoto, stesso URL del relay e questo codice‑stanza.'
-            : 'Sull’altro PC: Unisciti come ingegnere → comparirà in lista. Oppure indirizzo manuale:'}
-        </p>
-        <div className="flex items-center gap-2">
-          <code
-            className={`flex-1 num bg-racing-panel2 border border-racing-border rounded-lg px-3 py-2.5 ${
-              relay ? 'text-2xl font-bold tracking-[0.3em] text-center text-racing-accent' : 'text-sm'
-            }`}
-          >
-            {code}
-          </code>
-          <button
-            onClick={copy}
-            className="h-10 w-10 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10"
-            title="Copia"
-          >
-            {copied ? <Check size={16} className="text-racing-green" /> : <Copy size={16} />}
-          </button>
-        </div>
-        {relay && <div className="text-[11px] text-white/35 mt-2">Relay: {info.relayUrl}</div>}
-        {!relay && info.addresses?.length > 1 && (
-          <div className="text-[11px] text-white/35 mt-2">
-            Altri: {info.addresses.slice(1).map((a) => `${a}:${info.port}`).join(' · ')}
-          </div>
-        )}
-      </div>
+      {relay ? <RelayHostShare info={info} /> : <LanHostShare info={info} />}
 
       <button onClick={onLeave} className="btn-accent w-full">
         Termina sessione
+      </button>
+    </div>
+  )
+}
+
+/** Condivisione dell'invito sicuro (relay generato dall'app o esterno). */
+function RelayHostShare({ info }) {
+  return (
+    <div>
+      <div className="label mb-1.5 flex items-center gap-1.5">
+        <ShieldCheck size={13} className="text-racing-green" /> Invito sicuro per l'ingegnere
+      </div>
+      <p className="text-xs text-white/45 mb-2">
+        Nella sua app: <span className="text-white/70">Unisciti → Remoto → Connetti con invito</span>.
+        L'invito include relay, stanza e token: senza di esso nessuno può collegarsi.
+      </p>
+
+      <CopyBox value={info.invite} label="Copia invito" mono />
+
+      <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px] text-white/40">
+        <span className="text-white/30">Stanza</span>
+        <span className="num text-white/60">{info.room}</span>
+        {info.embedded && info.publicIp && (
+          <>
+            <span className="text-white/30">IP pubblico</span>
+            <span className="num text-white/60">
+              {info.publicIp}:{info.port}
+            </span>
+          </>
+        )}
+        {info.embedded && info.addresses?.[0] && (
+          <>
+            <span className="text-white/30">In LAN/VPN</span>
+            <span className="num text-white/60">
+              {info.addresses[0]}:{info.port}
+            </span>
+          </>
+        )}
+        {!info.embedded && (
+          <>
+            <span className="text-white/30">Relay</span>
+            <span className="num text-white/60 break-all">{info.relayUrl}</span>
+          </>
+        )}
+      </div>
+
+      {info.embedded && (
+        <p className="text-[11px] text-white/35 mt-3 flex items-start gap-1.5">
+          <Globe size={13} className="mt-px shrink-0" />
+          <span>
+            Per Internet inoltra la porta {info.port} sul router verso questo PC (o usa un
+            tunnel). In LAN o VPN l'invito funziona già così.
+          </span>
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** Condivisione dell'indirizzo per la sessione LAN. */
+function LanHostShare({ info }) {
+  const addr = info.addresses?.[0]
+  const value = addr ? `${addr}:${info.port}` : `porta ${info.port}`
+  return (
+    <div>
+      <div className="label mb-1.5">L'ingegnere ti trova automaticamente sulla LAN</div>
+      <p className="text-xs text-white/45 mb-2">
+        Sull'altro PC: Unisciti come ingegnere → comparirà in lista. Oppure indirizzo manuale:
+      </p>
+      <CopyBox value={value} label="Copia indirizzo" mono />
+      {info.addresses?.length > 1 && (
+        <div className="text-[11px] text-white/35 mt-2">
+          Altri: {info.addresses.slice(1).map((a) => `${a}:${info.port}`).join(' · ')}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Casella con valore selezionabile + pulsante "copia". */
+function CopyBox({ value, label = 'Copia', mono }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    if (!value) return
+    navigator.clipboard.writeText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <code
+        className={`flex-1 min-w-0 truncate bg-racing-panel2 border border-racing-border rounded-lg px-3 py-2.5 text-sm ${
+          mono ? 'num' : ''
+        }`}
+        title={value || ''}
+      >
+        {value || '—'}
+      </code>
+      <button
+        onClick={copy}
+        disabled={!value}
+        className="h-10 px-3 flex items-center gap-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-medium disabled:opacity-30 whitespace-nowrap"
+        title={label}
+      >
+        {copied ? <Check size={15} className="text-racing-green" /> : <Copy size={15} />}
+        {copied ? 'Copiato' : label}
       </button>
     </div>
   )

@@ -23,8 +23,9 @@ export function useLiveSession() {
 
   const host = useCallback(() => window.api.liveHost(), [])
   const join = useCallback((h, p) => window.api.liveJoin(h, p), [])
-  const hostRelay = useCallback((url, room) => window.api.liveHostRelay(url, room), [])
-  const joinRelay = useCallback((url, room) => window.api.liveJoinRelay(url, room), [])
+  const hostRelay = useCallback((url, room, token) => window.api.liveHostRelay(url, room, token), [])
+  const hostEmbeddedRelay = useCallback((port) => window.api.liveHostEmbeddedRelay(port), [])
+  const joinRelay = useCallback((url, room, token) => window.api.liveJoinRelay(url, room, token), [])
   const leave = useCallback(() => {
     setDiscovered([])
     return window.api.liveLeave()
@@ -40,6 +41,7 @@ export function useLiveSession() {
     host,
     join,
     hostRelay,
+    hostEmbeddedRelay,
     joinRelay,
     leave,
     startDiscovery,
